@@ -1,4 +1,4 @@
-aiogram
+﻿aiogram
 rcon
 mcstatus
 pandas
@@ -7,10 +7,8 @@ prometheus_client
 matplotlib
 plotly
 sqlalchemy
-sqlite3
 pytest
 schedule
 apscheduler
-logging
 aiohttp
 Jinja2

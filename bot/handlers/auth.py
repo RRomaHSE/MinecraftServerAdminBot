@@ -114,18 +114,51 @@ async def process_host(message: Message, state: FSMContext):
     await state.set_state(AuthStates.waiting_for_password)
 
 
+
 @router.message(AuthStates.waiting_for_password)
 async def process_password(message: Message, state: FSMContext):
-    """Обработка ввода пароля RCON"""
     password = message.text.strip()
     data = await state.get_data()
     server_host = data.get("server_host")
     server_port = data.get("server_port")
 
-    # Здесь будет проверка подключения к RCON
-    # Пока просто имитируем успешное подключение
+    try:
+        from bot.services.rcon_service import RconService
 
-    # Создаем сессию
+        rcon_client = RconService(server_host, server_port, password)
+
+        is_connected = await rcon_client.test_connection()
+
+        if not is_connected:
+            error_text = (
+                f"❌ *Не удалось подключиться!*\n\n"
+                f"Проверьте:\n"
+                f"1. Правильность адреса: `{server_host}:{server_port}`\n"
+                f"2. Правильность пароля RCON\n"
+                f"3. Запущен ли сервер\n"
+                f"4. Открыт ли RCON порт\n\n"
+                f"👇 Попробуйте снова:"
+            )
+            await message.answer(
+                error_text,
+                parse_mode="Markdown",
+                reply_markup=get_auth_cancel_keyboard()
+            )
+            return
+
+    except Exception as e:
+        error_text = (
+            f"❌ *Ошибка подключения!*\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"👇 Попробуйте снова:"
+        )
+        await message.answer(
+            error_text,
+            parse_mode="Markdown",
+            reply_markup=get_auth_cancel_keyboard()
+        )
+        return
+
     session = session_manager.create_session(
         user_id=message.from_user.id,
         server_host=server_host,
@@ -150,6 +183,8 @@ async def process_password(message: Message, state: FSMContext):
     )
 
     await state.clear()
+
+
 
 
 @router.callback_query(F.data == "auth_manage_session")
