@@ -28,7 +28,7 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    auth_middleware = AuthMiddleware(Config.ADMIN_IDS)
+    auth_middleware = AuthMiddleware()
     dp.message.middleware(auth_middleware)
     dp.callback_query.middleware(auth_middleware)
 

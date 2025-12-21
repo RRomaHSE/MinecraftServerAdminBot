@@ -2,13 +2,14 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable
 
+from bot.services.session_manager import session_manager
+
 
 class AuthMiddleware(BaseMiddleware):
-    """Middleware для проверки прав администратора"""
+    """Middleware для проверки авторизации"""
 
-    def __init__(self, admin_ids: list):
+    def __init__(self):
         super().__init__()
-        self.admin_ids = admin_ids
 
     async def __call__(
             self,
@@ -16,16 +17,19 @@ class AuthMiddleware(BaseMiddleware):
             event: Message | CallbackQuery,
             data: Dict[str, Any]
     ) -> Any:
-        if not self.admin_ids:
-            return await handler(event, data)
-
         user_id = event.from_user.id
 
-        if user_id in self.admin_ids:
-            return await handler(event, data)
-        else:
-            if isinstance(event, Message):
-                await event.answer("У вас нет прав для выполнения этой команды.")
-            elif isinstance(event, CallbackQuery):
-                await event.answer("У вас нет прав для этого действия.", show_alert=True)
-            return
+        # Команды, доступные только авторизованным
+        protected_commands = ["status", "quick_commands", "monitoring",
+                              "notifications", "auth_manage_session",
+                              "auth_logout", "auth_change_server"]
+
+        if isinstance(event, CallbackQuery) and event.data in protected_commands:
+            if not session_manager.is_authorized(user_id):
+                await event.answer(
+                    "🔒 Доступ ограничен. Используйте /start для авторизации.",
+                    show_alert=True
+                )
+                return
+
+        return await handler(event, data)
