@@ -3,11 +3,13 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.services.command_validator import CommandValidator, CommandType
 from infrastructure.adapters.rcon_client import RconClientAdapter
 from infrastructure.adapters.crypto import CryptoService
 from bot.keyboards.commands_menu import get_commands_keyboard, get_confirmation_keyboard
+from loggers.app_logger import logger
 
 router = Router()
 command_validator = CommandValidator()
@@ -240,34 +242,65 @@ async def execute_simple_command(message: Message, command: str, success_message
         await message.answer(f"❌ Ошибка выполнения команды: {str(e)[:200]}")
 
 
-@router.callback_query(F.data.startswith("cmd_"))
-async def quick_command(callback: CallbackQuery):
-    """Обработка быстрых команд из меню"""
-    command_map = {
-        "cmd_list": "list",
-        "cmd_save": "save-all",
-        "cmd_time": "time set day",
-        "cmd_weather": "weather clear",
-        "cmd_players": "list"
-    }
+@router.callback_query(lambda c: c.data.startswith("quick_cmd_"))
+async def quick_command(callback: CallbackQuery, session: AsyncSession):
+    try:
+        cmd_key = callback.data.split("_")[-1]
 
-    cmd_key = callback.data
-    if cmd_key in command_map:
-        # Создаем фейковое сообщение для выполнения команды
-        message = callback.message
-        message.text = f"/{command_map[cmd_key]}"
-        message.from_user = callback.from_user
+        # Получаем команду из маппинга
+        command_map = {
+            "save": "save-all",
+            "stop": "stop",
+            "kick_all": "kick @a",
+            "whitelist": "whitelist list",
+            "op": "list",
+            "time": "time query daytime",
+            "weather": "weather clear",
+            "difficulty": "difficulty",
+            "gamerule": "gamerule doDaylightCycle",
+            "seed": "seed"
+        }
 
-        if cmd_key == "cmd_list":
-            await cmd_list(message)
-        elif cmd_key == "cmd_save":
-            await cmd_save(message)
-        elif cmd_key == "cmd_time":
-            await cmd_time(message)
-        elif cmd_key == "cmd_weather":
-            await cmd_weather(message)
+        if cmd_key not in command_map:
+            await callback.answer("Команда не найдена", show_alert=True)
+            return
 
-    await callback.answer()
+        command = command_map[cmd_key]
+
+        # Получаем сессию пользователя
+        from infrastructure.adapters.database.repositories import UserSessionRepository
+        repo = UserSessionRepository(session)
+        user_session = await repo.get_by_user_id(callback.from_user.id)
+
+        if not user_session or not user_session.is_active:
+            await callback.answer("Сессия не активна", show_alert=True)
+            return
+
+        # Исполняем команду через RCON
+        from infrastructure.adapters.rcon_client import RconClientAdapter
+        rcon_service = RconClientAdapter()
+
+        result = await rcon_service.execute_command(
+            host=user_session.server_host,
+            port=user_session.rcon_port,
+            password=user_session.rcon_password,
+            command=command
+        )
+
+        if result.success:
+            await callback.message.edit_text(
+                f"✅ Команда выполнена: `{command}`\n\nРезультат:\n```\n{result.output}\n```",
+                parse_mode="Markdown"
+            )
+        else:
+            await callback.message.edit_text(
+                f"❌ Ошибка выполнения команды: `{command}`\n\nОшибка:\n```\n{result.error}\n```",
+                parse_mode="Markdown"
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка в quick_command: {e}")
+        await callback.answer("Ошибка выполнения команды", show_alert=True)
 
 
 @router.callback_query(F.data == "refresh_commands")

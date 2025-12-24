@@ -253,7 +253,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info("⏹ Остановка бота по запросу пользователя...")
     except Exception as e:
-        logger.critical(f"💥 Критическая ошибка при работе бота: {e}", exc_info=True)
+        logger.critical(f"💥 Критич еская ошибка при работе бота: {e}", exc_info=True)
     finally:
         # Остановка фоновых задач
         background_task.cancel()
