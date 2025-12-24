@@ -1,6 +1,7 @@
 # Виртуальное окружение
 venv/
 .env
+data/minecraft_bot.db
 
 # Python bytecode / cache
 __pycache__/
